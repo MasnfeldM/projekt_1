@@ -11,6 +11,7 @@ import requests
 import os
 import plotly.graph_objs as go
 import plotly.io as pio
+from sklearn.preprocessing import MinMaxScaler
 
 # Vytvoření FastAPI aplikace
 app = FastAPI()
@@ -37,6 +38,12 @@ async def upload(file: UploadFile = File(None), url: str = Form(None)):
             return JSONResponse(content={"error": "Please provide a file or URL."}, status_code=400)
         
         df = df.drop(columns=["corrosion", "corrosion_diff"], errors='ignore') 
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        datetime_col = df["Datetime"]
+        df = df.drop(columns=["Datetime"]) 
+        df = pd.DataFrame(scaler.fit_transform(df), columns=df.columns)
+        df.insert(0, "Datetime", datetime_col)  # Reinsert Datetime column if it was removed
+        df.fillna(0, inplace=True)
         df.to_csv(UPLOAD_PATH, index=False)
         return {"message": "Data uploaded successfully", "rows": len(df)}
 
@@ -74,7 +81,7 @@ def make_graph():
         predictions = pd.read_csv(PREDICTION_PATH)
         datetime = df["Datetime"] if "Datetime" in df.columns else df.index
         datetime = pd.to_datetime(datetime)
-        y_points = predictions["prediction_label"]
+        y_points = np.cumsum(predictions["prediction_label"])
         # Vytvoření grafu (např. index vs predikce)
         fig = go.Figure()
         fig.add_trace(
